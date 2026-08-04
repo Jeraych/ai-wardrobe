@@ -2,6 +2,12 @@
 
 AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in, complete onboarding, manage closet items, build outfits, save favourites, and generate virtual try-on previews from their profile/model image and selected clothing.
 
+## Brief Description
+
+- AI Wardrobe was developed collaboratively by `Jeraych`, `TheSKBroook`, `Overrhat`, `Patrick-Sheng`, `hkim807`, and `mzbzy10` as a team course project.
+- The application was designed for the University of Auckland COMPSCI 732 project requirements to explore a complete full-stack workflow for personal wardrobe management and outfit planning.
+- The application integrates Auth0, MongoDB, Cloudinary, and Replicate to manage user profiles, clothing items, and outfits while generating AI-assisted virtual try-on previews.
+
 ## Features
 
 - Auth0 login and signup.
