@@ -12,6 +12,36 @@ AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in,
 - AI virtual try-on generation using Replicate, with generated images stored through Cloudinary.
 - Upload guideline modals for profile and clothing images.
 
+## Screenshots
+
+### Home Dashboard
+
+![AI Wardrobe home dashboard](screenshot/home.png)
+
+### Closet
+
+![Closet item grid](screenshot/closetg.png)
+
+### Closet Item Details
+
+![Closet item details panel](screenshot/closet.png)
+
+### Saved Outfits
+
+![Saved outfits and virtual try-on preview](screenshot/outfits.png)
+
+### Profile
+
+![Profile and style preferences](screenshot/profile.png)
+
+### Onboarding Model Selection
+
+![Onboarding model selection](screenshot/onboard.png)
+
+### Login and Registration
+
+![Auth0 login and registration](screenshot/login.png)
+
 ## Architecture
 
 This repository is a monorepo with a Next.js frontend and an Express/MongoDB backend.
