@@ -20,11 +20,7 @@ AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in,
 
 ### Closet
 
-![Closet item grid](screenshot/closetg.png)
-
-### Closet Item Details
-
-![Closet item details panel](screenshot/closet.png)
+![Closet item grid](screenshot/closet.png)
 
 ### Saved Outfits
 
@@ -174,29 +170,29 @@ Default local URLs:
 
 Root scripts:
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Start frontend and backend together |
-| `npm run dev:frontend` | Start the frontend dev server |
-| `npm run dev:backend` | Start the backend dev server |
+| Command                | What it does                        |
+| ---------------------- | ----------------------------------- |
+| `npm run dev`          | Start frontend and backend together |
+| `npm run dev:frontend` | Start the frontend dev server       |
+| `npm run dev:backend`  | Start the backend dev server        |
 
 Frontend scripts:
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | Start the Next.js dev server |
+| Command         | What it does                      |
+| --------------- | --------------------------------- |
+| `npm run dev`   | Start the Next.js dev server      |
 | `npm run build` | Build the frontend for production |
-| `npm run start` | Serve the production frontend |
-| `npm run lint` | Run ESLint |
-| `npm test` | Run Vitest tests |
+| `npm run start` | Serve the production frontend     |
+| `npm run lint`  | Run ESLint                        |
+| `npm test`      | Run Vitest tests                  |
 
 Backend scripts:
 
-| Command | What it does |
-| --- | --- |
+| Command       | What it does               |
+| ------------- | -------------------------- |
 | `npm run dev` | Start the API with nodemon |
-| `npm start` | Start the API with Node.js |
-| `npm test` | Run Jest/Supertest tests |
+| `npm start`   | Start the API with Node.js |
+| `npm test`    | Run Jest/Supertest tests   |
 
 ## Testing
 
@@ -224,18 +220,18 @@ npm test
 
 ## Frontend Routes
 
-| URL | Page |
-| --- | --- |
-| `/login` | Auth0 sign-in entry point |
-| `/signup` | Centered Auth0 sign-up entry point |
-| `/onboarding` | Onboarding flow after Auth0 sign-in |
-| `/` | Home dashboard with wardrobe stats and outfit generation entry points |
-| `/closet` | Searchable closet item grid, item details, add/edit item flows |
-| `/closet?addItem=1` | Opens the add clothing item modal |
-| `/outfits` | Saved outfit library with favourite outfit support |
-| `/outfits/builder` | Create or edit outfits from closet items |
-| `/profile` | Profile details, body profile, style preferences, and photo upload |
-| `/components` | Component showcase |
+| URL                 | Page                                                                  |
+| ------------------- | --------------------------------------------------------------------- |
+| `/login`            | Auth0 sign-in entry point                                             |
+| `/signup`           | Centered Auth0 sign-up entry point                                    |
+| `/onboarding`       | Onboarding flow after Auth0 sign-in                                   |
+| `/`                 | Home dashboard with wardrobe stats and outfit generation entry points |
+| `/closet`           | Searchable closet item grid, item details, add/edit item flows        |
+| `/closet?addItem=1` | Opens the add clothing item modal                                     |
+| `/outfits`          | Saved outfit library with favourite outfit support                    |
+| `/outfits/builder`  | Create or edit outfits from closet items                              |
+| `/profile`          | Profile details, body profile, style preferences, and photo upload    |
+| `/components`       | Component showcase                                                    |
 
 ## Onboarding And Auth
 
@@ -246,28 +242,28 @@ npm test
 
 ## Backend API Routes
 
-| Method | URL | What it does |
-| --- | --- | --- |
-| `GET` | `/` | Health check |
-| `POST` | `/api/users/me/sync` | Create the authenticated user's MongoDB profile if missing |
-| `GET` | `/api/users/me` | Get the authenticated user's profile |
-| `PUT` | `/api/users/me` | Replace/update the authenticated user's profile |
-| `PATCH` | `/api/users/me/profile` | Update editable profile fields |
-| `PATCH` | `/api/users/me/body-profile` | Update body profile fields |
-| `PATCH` | `/api/users/me/style-preferences` | Update style preferences |
-| `PUT` | `/api/users/me/photo` | Update the profile photo URL |
-| `POST` | `/api/users/me/photo/upload` | Upload a user profile/model image |
-| `DELETE` | `/api/users/me` | Delete the authenticated user's profile |
-| `POST` | `/api/clothingItems/me` | Create a clothing item |
-| `GET` | `/api/clothingItems/me` | List the authenticated user's clothing items |
-| `PUT` | `/api/clothingItems/me/:id` | Update a clothing item |
-| `DELETE` | `/api/clothingItems/me/:id` | Delete a clothing item |
-| `POST` | `/api/clothingItems/me/:id/image` | Upload an image for a clothing item |
-| `POST` | `/api/outfits/me` | Create an outfit |
-| `GET` | `/api/outfits/me` | List outfits |
-| `PUT` | `/api/outfits/me/:id` | Update an outfit |
-| `DELETE` | `/api/outfits/me/:id` | Delete an outfit |
-| `POST` | `/api/tryon` | Generate a virtual try-on image with Replicate |
+| Method   | URL                               | What it does                                               |
+| -------- | --------------------------------- | ---------------------------------------------------------- |
+| `GET`    | `/`                               | Health check                                               |
+| `POST`   | `/api/users/me/sync`              | Create the authenticated user's MongoDB profile if missing |
+| `GET`    | `/api/users/me`                   | Get the authenticated user's profile                       |
+| `PUT`    | `/api/users/me`                   | Replace/update the authenticated user's profile            |
+| `PATCH`  | `/api/users/me/profile`           | Update editable profile fields                             |
+| `PATCH`  | `/api/users/me/body-profile`      | Update body profile fields                                 |
+| `PATCH`  | `/api/users/me/style-preferences` | Update style preferences                                   |
+| `PUT`    | `/api/users/me/photo`             | Update the profile photo URL                               |
+| `POST`   | `/api/users/me/photo/upload`      | Upload a user profile/model image                          |
+| `DELETE` | `/api/users/me`                   | Delete the authenticated user's profile                    |
+| `POST`   | `/api/clothingItems/me`           | Create a clothing item                                     |
+| `GET`    | `/api/clothingItems/me`           | List the authenticated user's clothing items               |
+| `PUT`    | `/api/clothingItems/me/:id`       | Update a clothing item                                     |
+| `DELETE` | `/api/clothingItems/me/:id`       | Delete a clothing item                                     |
+| `POST`   | `/api/clothingItems/me/:id/image` | Upload an image for a clothing item                        |
+| `POST`   | `/api/outfits/me`                 | Create an outfit                                           |
+| `GET`    | `/api/outfits/me`                 | List outfits                                               |
+| `PUT`    | `/api/outfits/me/:id`             | Update an outfit                                           |
+| `DELETE` | `/api/outfits/me/:id`             | Delete an outfit                                           |
+| `POST`   | `/api/tryon`                      | Generate a virtual try-on image with Replicate             |
 
 Authenticated backend routes require:
 
