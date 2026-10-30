@@ -1,255 +1,161 @@
 const express = require("express");
 const request = require("supertest");
 
-process.env.REPLICATE_API_TOKEN = "test-token";
-
-const mockRun = jest.fn();
-const mockPopulate = jest.fn();
-const mockUploadImageUrlToCloudinary = jest.fn();
-
-jest.mock("replicate", () => {
-  return jest.fn().mockImplementation(() => ({
-    run: mockRun,
-  }));
-});
-
 jest.mock("../middleware/auth", () => ({
   requireAuth: (req, res, next) => {
-    req.auth = {
-      payload: {
-        sub: "auth0|test-user",
-      },
-    };
-
+    if (!req.headers.authorization) return res.status(401).json({ error: "Unauthorized" });
+    req.auth = { payload: { sub: "auth0|test-user" } };
     next();
   },
 }));
-
-jest.mock("../db/userService", () => ({
-  getUserByAuth0UserId: jest.fn(),
-}));
-
-jest.mock("../lib/cloudinary", () => ({
-  uploadImageUrlToCloudinary: jest.fn(),
-}));
-
-jest.mock("../models/Outfit", () => ({
-  findById: jest.fn(),
-}));
+jest.mock("../db/userService", () => ({ getUserByAuth0UserId: jest.fn() }));
+jest.mock("../lib/cloudinary", () => ({ uploadToCloudinary: jest.fn() }));
+jest.mock("../models/Outfit", () => ({ findById: jest.fn() }));
+jest.mock("../lib/openaiImage", () => ({ generateImage: jest.fn(), downloadReference: jest.fn() }));
 
 const Outfit = require("../models/Outfit");
 const { getUserByAuth0UserId } = require("../db/userService");
-const { uploadImageUrlToCloudinary } = require("../lib/cloudinary");
-const tryonRouter = require("../routes/tryon");
-
+const { uploadToCloudinary } = require("../lib/cloudinary");
+const { generateImage, downloadReference } = require("../lib/openaiImage");
 const app = express();
 app.use(express.json());
-app.use("/api/tryon", tryonRouter);
+app.use("/api/tryon", require("../routes/tryon"));
+const payload = { outfitId: "outfit-1", humanImageUrl: "https://res.cloudinary.com/demo/person.png" };
+const garment = { userId: "user-1", name: "Shirt", category: "upper_body", imageUrls: { front: "https://res.cloudinary.com/demo/shirt.png" } };
+const reference = { buffer: Buffer.from("reference"), type: "image/png" };
+let outfit;
+const post = (body = payload) => request(app).post("/api/tryon").set("Authorization", "Bearer test").send(body);
 
-const user = { _id: "user-1" };
+beforeEach(() => {
+  jest.clearAllMocks();
+  jest.spyOn(console, "info").mockImplementation(() => {});
+  process.env.OPENAI_API_KEY = "test-key";
+  getUserByAuth0UserId.mockResolvedValue({ _id: "user-1" });
+  outfit = { userId: { toString: () => "user-1" }, save: jest.fn(), items: [garment] };
+  outfit.populate = jest.fn().mockResolvedValue(outfit);
+  Outfit.findById.mockImplementation(async () => outfit);
+  downloadReference.mockResolvedValue(reference);
+  generateImage.mockResolvedValue({ buffer: Buffer.from("result") });
+  uploadToCloudinary.mockResolvedValue("https://res.cloudinary.com/demo/result.webp");
+});
+afterEach(() => { jest.restoreAllMocks(); delete process.env.OPENAI_API_KEY; });
 
-function mockOutfitLookup(outfit) {
-  mockPopulate.mockResolvedValue(outfit);
-  Outfit.findById.mockReturnValue({ populate: mockPopulate });
-}
+describe("POST /api/tryon authentication, ownership and generation", () => {
+  test("rejects unauthenticated requests", async () => {
+    expect((await request(app).post("/api/tryon").send(payload)).status).toBe(401);
+    expect(getUserByAuth0UserId).not.toHaveBeenCalled();
+    expect(generateImage).not.toHaveBeenCalled();
 
-describe("POST /api/tryon", () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-    process.env.REPLICATE_API_TOKEN = "test-token";
-    getUserByAuth0UserId.mockResolvedValue(user);
-    uploadImageUrlToCloudinary.mockImplementation(mockUploadImageUrlToCloudinary);
-    mockUploadImageUrlToCloudinary.mockResolvedValue("https://res.cloudinary.com/demo/image/upload/tryon-preview.jpg");
   });
-
-  it("returns 400 if humanImageUrl is missing", async () => {
-    const res = await request(app).post("/api/tryon").send({
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("humanImageUrl is required");
+  test("missing OpenAI key fails before database/provider work", async () => {
+    delete process.env.OPENAI_API_KEY;
+    expect((await post()).status).toBe(503);
+    expect(getUserByAuth0UserId).not.toHaveBeenCalled();
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+  test("missing user returns 404", async () => {
+    getUserByAuth0UserId.mockResolvedValue(null);
+    expect((await post()).status).toBe(404);
     expect(Outfit.findById).not.toHaveBeenCalled();
   });
-
-  it("returns 400 if outfitId is missing", async () => {
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("outfitId is required");
+  test.each([[{ outfitId: "outfit-1" }, "humanImageUrl is required"],
+    [{ humanImageUrl: payload.humanImageUrl }, "outfitId is required"]])("validates required inputs", async (body, message) => {
+    const response = await post(body);
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe(message);
     expect(Outfit.findById).not.toHaveBeenCalled();
   });
-
-  it("returns 404 if the outfit does not exist", async () => {
-    mockOutfitLookup(null);
-
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "missing-outfit",
-    });
-
-    expect(res.status).toBe(404);
-    expect(res.body.error).toBe("Outfit not found");
-    expect(Outfit.findById).toHaveBeenCalledWith("missing-outfit");
-    expect(mockPopulate).toHaveBeenCalledWith("items");
+  test("missing outfit returns 404", async () => {
+    outfit = null;
+    expect((await post()).status).toBe(404);
+    expect(Outfit.findById).toHaveBeenCalledWith("outfit-1");
+    expect(generateImage).not.toHaveBeenCalled();
   });
+  test("another user's outfit returns 403", async () => {
+    outfit.userId = { toString: () => "other-user" };
+    expect((await post()).status).toBe(403);
 
-  it("returns 403 if the outfit belongs to a different user", async () => {
-    mockOutfitLookup({
-      userId: { toString: () => "other-user" },
-      items: [],
-    });
-
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(403);
-    expect(res.body.error).toBe("Forbidden");
-    expect(mockRun).not.toHaveBeenCalled();
+    expect(generateImage).not.toHaveBeenCalled();
   });
-
-  it("returns 400 if the outfit has no items with a front image", async () => {
-    mockOutfitLookup({
-      userId: { toString: () => "user-1" },
-      items: [
-        {
-          name: "Jacket",
-          category: "outerwear",
-          imageUrls: { back: "https://example.com/jacket-back.jpg" },
-        },
-        {
-          name: "Shoes",
-          category: "shoes",
-          imageUrls: {},
-        },
-        {
-          name: "Hat",
-          category: "accessories",
-        },
-      ],
-    });
-
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(400);
-    expect(res.body.error).toBe("No garment images found in this outfit");
-    expect(mockRun).not.toHaveBeenCalled();
+  test("an outfit without front garment images returns 400", async () => {
+    outfit.items = [{ userId: "user-1", name: "Hat", category: "accessories" }, { userId: "user-1", category: "upper_body", imageUrls: { back: "https://example.com/back.png" } }];
+    const response = await post();
+    expect(response.status).toBe(400);
+    expect(response.body.error).toBe("No garment images found in this outfit");
+    expect(generateImage).not.toHaveBeenCalled();
   });
-
-  it("calls Replicate with the full outfit and returns the generated image URL", async () => {
-    mockRun.mockResolvedValue("https://example.com/result.jpg");
-    mockOutfitLookup({
-      userId: { toString: () => "user-1" },
-      save: jest.fn().mockResolvedValue(undefined),
-      items: [
-        {
-          name: "Tshirt",
-          category: "upper_body",
-          imageUrls: { front: "https://example.com/tshirt-front.jpg" },
-        },
-        {
-          name: "Jeans",
-          category: "lower_body",
-          imageUrls: { front: "https://example.com/jeans-front.jpg" },
-        },
-      ],
-    });
-
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({
-      success: true,
-      imageUrl: "https://res.cloudinary.com/demo/image/upload/tryon-preview.jpg",
-    });
-    expect(mockRun).toHaveBeenCalledWith("openai/gpt-image-2", {
-      input: {
-        prompt: expect.stringContaining(
-          "Virtual try-on: dress the person in Image 1",
-        ),
-        input_images: [
-          "https://example.com/person.jpg",
-          "https://example.com/tshirt-front.jpg",
-          "https://example.com/jeans-front.jpg",
-        ],
-        quality: "low",
-        aspect_ratio: "1:1",
-        number_of_images: 1,
-      },
-    });
-    expect(mockRun.mock.calls[0][1].input.prompt).toContain(
-      "Tshirt (upper_body), Jeans (lower_body)",
-    );
-    expect(uploadImageUrlToCloudinary).toHaveBeenCalledWith(
-      "https://example.com/result.jpg",
-      "tryon-previews",
-    );
+  test("preserves full-outfit prompt/reference order and stores the generated image", async () => {
+    outfit.items.push({ userId: "user-1", name: "Jeans", category: "lower_body", imageUrls: { front: "https://res.cloudinary.com/demo/jeans.png" } });
+    const response = await post();
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ success: true, imageUrl: "https://res.cloudinary.com/demo/result.webp" });
+    expect(downloadReference.mock.calls.map(call => call[0])).toEqual([payload.humanImageUrl, garment.imageUrls.front, outfit.items[1].imageUrls.front]);
+    expect(generateImage).toHaveBeenCalledWith([reference, reference, reference],
+      "Virtual try-on: dress the person in Image 1 in the clothing in the remaining references (Shirt (upper_body), Jeans (lower_body)). Preserve identity, face, body shape, garment colors and patterns. Show the complete outfit naturally.");
+    expect(uploadToCloudinary).toHaveBeenCalledWith(Buffer.from("result"), "tryon-previews");
+    expect(outfit.save).toHaveBeenCalled();
+    expect(outfit.lastTryOnPreviewUrl).toBe(response.body.imageUrl);
   });
+});
 
-  it("handles Replicate output URLs returned as URL objects", async () => {
-    mockRun.mockResolvedValue([
-      {
-        url: () => new URL("https://example.com/result-from-url-object.jpg"),
-      },
-    ]);
-    mockOutfitLookup({
-      userId: { toString: () => "user-1" },
-      save: jest.fn().mockResolvedValue(undefined),
-      items: [
-        {
-          name: "Tshirt",
-          category: "upper_body",
-          imageUrls: { front: "https://example.com/tshirt-front.jpg" },
-        },
-      ],
-    });
+describe("provider failure handling", () => {
+  test("reference-download failure prevents generation", async () => {
+    downloadReference.mockRejectedValue(new Error("reference failed"));
+    expect((await post()).status).toBe(500);
+    expect(generateImage).not.toHaveBeenCalled();
 
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(200);
-    expect(uploadImageUrlToCloudinary).toHaveBeenCalledWith(
-      "https://example.com/result-from-url-object.jpg",
-      "tryon-previews",
-    );
   });
+  test.each([400, 429])("confirmed provider rejection %i keeps its HTTP status", async (status) => {
+    generateImage.mockRejectedValue(Object.assign(new Error("rejected"), { status, generationSettled: true }));
+    expect((await post()).status).toBe(status);
 
-  it("returns 500 if Replicate throws an error", async () => {
-    mockRun.mockRejectedValue(new Error("Replicate network failure"));
-    mockOutfitLookup({
-      userId: { toString: () => "user-1" },
-      items: [
-        {
-          name: "Tshirt",
-          category: "upper_body",
-          imageUrls: { front: "https://example.com/tshirt-front.jpg" },
-        },
-        {
-          name: "Jeans",
-          category: "lower_body",
-          imageUrls: { front: "https://example.com/jeans-front.jpg" },
-        },
-      ],
-    });
-
-    const res = await request(app).post("/api/tryon").send({
-      humanImageUrl: "https://example.com/person.jpg",
-      outfitId: "outfit-1",
-    });
-
-    expect(res.status).toBe(500);
-    expect(res.body.success).toBe(false);
   });
+  test.each([new Error("connection reset"), Object.assign(new Error("timeout"), { name: "TimeoutError" }),
+    Object.assign(new Error("upstream failure"), { status: 502 })])("provider failures retain their HTTP status: %s", async (error) => {
+    generateImage.mockRejectedValue(error);
+    expect((await post()).status).toBe(error.status || 500);
+
+  });
+  test("failed storage returns an error after completed generation", async () => {
+    uploadToCloudinary.mockRejectedValue(new Error("storage failure"));
+    expect((await post()).status).toBe(500);
+
+  });
+});
+
+
+test("legacy oversized outfits are rejected before population or downloads", async () => {
+ outfit.items = Array.from({ length: 100 }, () => garment);
+ expect((await post()).status).toBe(400);
+ expect(outfit.populate).not.toHaveBeenCalled();
+ expect(downloadReference).not.toHaveBeenCalled();
+ expect(generateImage).not.toHaveBeenCalled();
+});
+test("legacy references to another user's item never reach downloads or provider", async () => {
+ outfit.items = [{ ...garment, userId: "victim-user" }];
+ expect((await post()).status).toBe(403);
+ expect(downloadReference).not.toHaveBeenCalled();
+ expect(generateImage).not.toHaveBeenCalled();
+});
+test("legacy duplicate categories never reach generation", async () => {
+ outfit.items = [garment, { ...garment, name: "Another Shirt" }];
+ expect((await post()).status).toBe(400);
+ expect(downloadReference).not.toHaveBeenCalled();
+ expect(generateImage).not.toHaveBeenCalled();
+});
+
+
+test("generation evidence logs only safe timings/token counts and provider labels", async () => {
+ generateImage.mockResolvedValue({ buffer: Buffer.from("result"), requestId: "req-test",
+  usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120, private_field: "never log this" } });
+ expect((await post()).status).toBe(200);
+ expect(console.info).toHaveBeenCalledTimes(1);
+ const line = console.info.mock.calls[0][0];
+ const event = JSON.parse(line);
+ expect(event).toMatchObject({ event: "tryon_generated", requestId: "req-test", usage: { input_tokens: 100, output_tokens: 20, total_tokens: 120 } });
+ expect(event.elapsedMs).toBeGreaterThanOrEqual(0);
+ expect(line).not.toContain("private_field");
+ expect(line).not.toContain("res.cloudinary.com");
+ expect(line).not.toContain("auth0|");
+ expect(line).not.toContain("Virtual try-on");
 });
