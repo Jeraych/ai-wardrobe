@@ -18,6 +18,7 @@ async function getItems({ userId, category, size, fit }) {
 const updateItemForUser = (id, userId, data) =>
   ClothingItem.findOneAndUpdate({ _id: id, userId }, data, {
     returnDocument: "after",
+    runValidators: true,
   });
 
 const deleteItemForUser = (id, userId) =>

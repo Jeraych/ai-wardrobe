@@ -12,6 +12,8 @@ jest.mock("../middleware/auth.js", () => ({
     req.auth = {
       payload: {
         sub: "auth0|test-user",
+        email: "jane@example.com",
+        email_verified: true,
       },
     };
 

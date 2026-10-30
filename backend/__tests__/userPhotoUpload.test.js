@@ -110,4 +110,15 @@ describe("POST /api/users/me/photo/upload", () => {
     expect(res.status).toBe(401);
     expect(uploadToCloudinary).not.toHaveBeenCalled();
   });
+  it.each([[4 * 1024 * 1024, 200], [4 * 1024 * 1024 + 1, 413]])(
+    "enforces the 4 MB upload boundary (%i bytes => %i)", async (bytes, status) => {
+    await createTestUser();
+    const res = await request(app).post("/api/users/me/photo/upload").set(authHeader)
+      .attach("image", Buffer.alloc(bytes), { filename: "photo.png", contentType: "image/png" });
+    expect(res.status).toBe(status);
+    if (status === 413) {
+      expect(res.body.error).toBe("Images must be 4 MB or smaller.");
+      expect(uploadToCloudinary).not.toHaveBeenCalled();
+    }
+  });
 });

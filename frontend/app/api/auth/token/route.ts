@@ -5,8 +5,8 @@ import { NextResponse } from "next/server";
 export async function GET() {
   try {
     const { token } = await auth0.getAccessToken();
-    return NextResponse.json({ token });
+    return NextResponse.json({ token }, { headers: { "Cache-Control": "private, no-store" } });
   } catch {
-    return NextResponse.json({ token: null });
+    return NextResponse.json({ token: null }, { headers: { "Cache-Control": "private, no-store" } });
   }
 }

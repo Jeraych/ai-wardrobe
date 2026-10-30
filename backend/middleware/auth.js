@@ -6,7 +6,7 @@ if (!process.env.AUTH0_DOMAIN || !process.env.AUTH0_AUDIENCE) {
 
 // Validate Auth0 access tokens before routes read req.auth.payload.sub.
 const requireAuth = auth({
-  issuerBaseURL: `https://${process.env.AUTH0_DOMAIN}`,
+  issuerBaseURL: `https://${process.env.AUTH0_DOMAIN.replace(/^https?:\/\//, "").replace(/\/$/, "")}`,
   audience: process.env.AUTH0_AUDIENCE,
   tokenSigningAlg: "RS256",
 });

@@ -26,7 +26,13 @@ async function getAuthenticatedUser(req, res) {
 
 // Ensure every outfit item exists and belongs to the authenticated user before saving references.
 async function validateOwnedItems(userId, itemIds = []) {
-  const uniqueItemIds = [...new Set(itemIds.map(String))];
+  if (!Array.isArray(itemIds) || itemIds.length > 6 || itemIds.some(id => typeof id !== "string")) {
+    throw Object.assign(new Error("Outfits may contain at most 6 item IDs"), { statusCode: 400 });
+  }
+  const uniqueItemIds = [...new Set(itemIds)];
+  if (uniqueItemIds.length !== itemIds.length) {
+    throw Object.assign(new Error("Outfit items must be unique"), { statusCode: 400 });
+  }
   const items = await ClothingItem.find({
     _id: { $in: uniqueItemIds },
     userId,
@@ -38,6 +44,9 @@ async function validateOwnedItems(userId, itemIds = []) {
     throw error;
   }
 
+  if (new Set(items.map(item => item.category)).size !== items.length) {
+    throw Object.assign(new Error("Outfit items must be from different categories"), { statusCode: 400 });
+  }
   return uniqueItemIds;
 }
 
@@ -99,7 +108,7 @@ router.put("/me/:id", requireAuth, async (req, res) => {
     if (Object.hasOwn(req.body, "name")) update.name = req.body.name;
     if (Object.hasOwn(req.body, "style")) update.style = req.body.style;
     if (Object.hasOwn(req.body, "favourite")) update.favourite = req.body.favourite;
-    if (req.body.items) {
+    if (Object.hasOwn(req.body, "items")) {
       // Revalidate item ownership whenever the outfit composition changes.
       update.items = await validateOwnedItems(user._id, req.body.items);
     }

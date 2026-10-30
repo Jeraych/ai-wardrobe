@@ -2,9 +2,9 @@ const mongoose = require("mongoose");
 
 // Stores Auth0 identity plus wardrobe-specific profile and onboarding data.
 const UserSchema = new mongoose.Schema({
-  auth0UserId: { type: String, required: true, unique: true },
+  auth0UserId: { type: String, required: true, unique: true, immutable: true },
   name: { type: String, required: true, minlength: 2, maxlength: 20 },
-  email: { type: String, required: true, unique: true },
+  email: { type: String, required: true, unique: true, immutable: true },
   // Body profile fields are optional until onboarding/profile setup supplies them.
   bodyProfile: {
     age: { type: Number, min: 0 },

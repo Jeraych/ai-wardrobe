@@ -176,4 +176,16 @@ describe("POST /api/clothingItems/me/:id/image", () => {
     expect(res.status).toBe(500);
     expect(res.body.error).toBe("Cloudinary failed");
   });
+  it.each([[4 * 1024 * 1024, 200], [4 * 1024 * 1024 + 1, 413]])(
+    "enforces the 4 MB upload boundary (%i bytes => %i)", async (bytes, status) => {
+    const user = await createTestUser();
+    const item = await createTestItem(user._id);
+    const res = await request(app).post(`/api/clothingItems/me/${item._id}/image`).set(authHeader)
+      .attach("image", Buffer.alloc(bytes), { filename: "photo.png", contentType: "image/png" });
+    expect(res.status).toBe(status);
+    if (status === 413) {
+      expect(res.body.error).toBe("Images must be 4 MB or smaller.");
+      expect(uploadToCloudinary).not.toHaveBeenCalled();
+    }
+  });
 });

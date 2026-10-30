@@ -8,6 +8,7 @@ const {
 const { uploadToCloudinary } = require("../lib/cloudinary");
 const { requireAuth } = require("../middleware/auth");
 const upload = require("../middleware/upload");
+const { authenticatedEmail } = require("../lib/authenticatedIdentity");
 const router = express.Router();
 
 // Only these profile fields can be patched from the frontend profile/onboarding flows.
@@ -147,11 +148,11 @@ router.post("/me/sync", requireAuth, async (req, res) => {
     const newUser = await addUser({
       auth0UserId,
       name: req.body.name,
-      email: req.body.email,
+      email: await authenticatedEmail(req),
     });
     res.status(201).json(newUser);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 500).json({ error: error.message });
   }
 });
 
@@ -169,7 +170,7 @@ router.get("/me", requireAuth, async (req, res) => {
   }
 });
 
-// Apply a full user update for callers that already have a complete profile payload.
+// Update profile fields only; identity always belongs to the verified Auth0 subject.
 router.put("/me", requireAuth, async (req, res) => {
   try {
     const existingUser = await getAuthenticatedUser(req, res);
@@ -177,7 +178,18 @@ router.put("/me", requireAuth, async (req, res) => {
       return;
     }
 
-    const updatedUser = await updateUser(existingUser._id, req.body);
+    const allowedFields = [...PROFILE_FIELDS, "isCompleteOnboarding"];
+    if (Object.keys(req.body).some(field => !allowedFields.includes(field))) {
+      return res.status(400).json({ error: "Unsupported profile fields" });
+    }
+    const update = buildProfileUpdate(req.body);
+    if (Object.hasOwn(req.body, "isCompleteOnboarding")) {
+      if (typeof req.body.isCompleteOnboarding !== "boolean") {
+        return res.status(400).json({ error: "isCompleteOnboarding must be a boolean" });
+      }
+      update.isCompleteOnboarding = req.body.isCompleteOnboarding;
+    }
+    const updatedUser = await updateUser(existingUser._id, { $set: update });
     res.json(updatedUser);
   } catch (error) {
     res

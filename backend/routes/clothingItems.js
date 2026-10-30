@@ -6,6 +6,19 @@ const {
   deleteItemForUser,
 } = require("../db/clothingService");
 const router = express.Router();
+const EDITABLE_FIELDS = ["name", "category", "size", "fit", "favourite", "imageUrls"];
+function editableItemFields(body) {
+  if (Object.keys(body).some(field => !EDITABLE_FIELDS.includes(field))) {
+    throw Object.assign(new Error("Unsupported clothing fields"), { status: 400 });
+  }
+  const update = {};
+  for (const field of EDITABLE_FIELDS) if (Object.hasOwn(body, field)) update[field] = body[field];
+  if (update.imageUrls && (typeof update.imageUrls !== "object" || Array.isArray(update.imageUrls) ||
+      Object.keys(update.imageUrls).some(field => !["front", "back", "side"].includes(field)))) {
+    throw Object.assign(new Error("Unsupported image fields"), { status: 400 });
+  }
+  return update;
+}
 const { requireAuth } = require("../middleware/auth");
 const { getUserByAuth0UserId } = require("../db/userService");
 const { uploadToCloudinary } = require("../lib/cloudinary");
@@ -34,12 +47,12 @@ router.post("/me", requireAuth, async (req, res) => {
 
     // Attach ownership server-side instead of trusting userId from the request body.
     const item = await addItem({
-      ...withoutShoeSize(req.body),
+      ...withoutShoeSize(editableItemFields(req.body)),
       userId: user._id,
     });
     res.status(201).json(item);
   } catch (error) {
-    const messages = Object.values(error.errors).map((e) => e.message);
+    const messages = error.errors ? Object.values(error.errors).map((e) => e.message) : [error.message];
     return res.status(400).json({ errors: messages });
   }
 });
@@ -72,12 +85,12 @@ router.put("/me/:id", requireAuth, async (req, res) => {
       return res.status(404).json({ error: "User not found" });
     }
 
-    const update = withoutShoeSize(req.body);
+    const update = withoutShoeSize(editableItemFields(req.body));
     // Switching an existing item to shoes must unset any previously saved size in MongoDB.
     const updateData =
       req.body.category === "shoes"
         ? { $set: update, $unset: { size: "" } }
-        : update;
+        : { $set: update };
 
     const item = await updateItemForUser(req.params.id, user._id, updateData);
 
