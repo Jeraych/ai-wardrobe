@@ -5,10 +5,22 @@ const Outfit = require("../models/Outfit");
 const { generateImage, downloadReference } = require("../lib/openaiImage");
 const { uploadToCloudinary } = require("../lib/cloudinary");
 
+const generationSlots = require("../lib/generationSlots");
+
 const router = express.Router();
 
 // Generate and persist a virtual try-on preview for an owned outfit.
 router.post("/", requireAuth, async (req, res) => {
+  let lease;
+  let providerStarted = false;
+  let providerSettled = false;
+  async function releaseSettledLease() {
+    if (!lease || (providerStarted && !providerSettled)) return;
+    const owner = lease;
+    lease = undefined;
+    try { await generationSlots.release(owner); }
+    catch { console.error("Generation lease release failed; retained until expiry"); }
+  }
   try {
     // Fail early with a configuration error before doing any database or provider work.
     if (!process.env.OPENAI_API_KEY || process.env.OPENAI_API_KEY === "YOUR_OPENAI_API_KEY") {
@@ -32,7 +44,7 @@ router.post("/", requireAuth, async (req, res) => {
       return res.status(403).json({ error: "Forbidden" });
     }
 
-    // Bound the reference set before population or downloads.
+    // Bound the reference set before population, downloads, or capacity allocation.
     if (!Array.isArray(outfit.items) || outfit.items.length > 6) {
       return res.status(400).json({ error: "Outfits may contain at most 6 garments" });
     }
@@ -56,10 +68,18 @@ router.post("/", requireAuth, async (req, res) => {
       .map((item) => `${item.name} (${item.category})`)
       .join(", ");
 
+    lease = await generationSlots.acquire();
+    if (!lease) {
+      res.set("Retry-After", "30");
+      return res.status(429).json({ success: false, error: "Generation is busy. Please try again later." });
+    }
+
     // Preserve the existing OpenAI prompt and image settings.
     const images = await Promise.all([humanImageUrl, ...garmentImageUrls].map(downloadReference));
+    providerStarted = true;
     const generationStartedAt = Date.now();
     const result = await generateImage(images, `Virtual try-on: dress the person in Image 1 in the clothing in the remaining references (${clothingDescription}). Preserve identity, face, body shape, garment colors and patterns. Show the complete outfit naturally.`);
+    providerSettled = true;
     // Record performance evidence without identity, image URLs, prompts or credentials.
     const usage = Object.fromEntries(['input_tokens', 'output_tokens', 'total_tokens']
       .filter(key => Number.isFinite(result.usage?.[key]) && result.usage[key] >= 0)
@@ -68,6 +88,7 @@ router.post("/", requireAuth, async (req, res) => {
     console.info(JSON.stringify({ event: 'tryon_generated', elapsedMs: Date.now() - generationStartedAt,
       usage, requestId: safeLabel(result.requestId), model: safeLabel(process.env.OPENAI_IMAGE_MODEL || 'gpt-image-2'),
       quality: safeLabel(process.env.OPENAI_IMAGE_QUALITY || 'low') }));
+    await releaseSettledLease();
     const storedImageUrl = await uploadToCloudinary(result.buffer, "tryon-previews");
 
     // Save the latest preview URL on the outfit so it can be shown without regenerating.
@@ -76,6 +97,8 @@ router.post("/", requireAuth, async (req, res) => {
 
     res.json({ success: true, imageUrl: storedImageUrl });
   } catch (error) {
+    if (error.generationSettled === true) providerSettled = true;
+    await releaseSettledLease();
     res.status(error.status || 500).json({ success: false, error: error.message });
   }
 });

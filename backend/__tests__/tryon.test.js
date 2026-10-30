@@ -1,5 +1,6 @@
 const express = require("express");
 const request = require("supertest");
+const mongoose = require("mongoose");
 
 jest.mock("../middleware/auth", () => ({
   requireAuth: (req, res, next) => {
@@ -17,6 +18,7 @@ const Outfit = require("../models/Outfit");
 const { getUserByAuth0UserId } = require("../db/userService");
 const { uploadToCloudinary } = require("../lib/cloudinary");
 const { generateImage, downloadReference } = require("../lib/openaiImage");
+const slots = require("../lib/generationSlots");
 const app = express();
 app.use(express.json());
 app.use("/api/tryon", require("../routes/tryon"));
@@ -25,6 +27,7 @@ const garment = { userId: "user-1", name: "Shirt", category: "upper_body", image
 const reference = { buffer: Buffer.from("reference"), type: "image/png" };
 let outfit;
 const post = (body = payload) => request(app).post("/api/tryon").set("Authorization", "Bearer test").send(body);
+const leaseCount = async () => (await mongoose.connection.collection("generation_slots").findOne({ _id: slots.DOCUMENT_ID }))?.leases.length || 0;
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -41,11 +44,11 @@ beforeEach(() => {
 afterEach(() => { jest.restoreAllMocks(); delete process.env.OPENAI_API_KEY; });
 
 describe("POST /api/tryon authentication, ownership and generation", () => {
-  test("rejects unauthenticated requests", async () => {
+  test("rejects unauthenticated requests without consuming capacity", async () => {
     expect((await request(app).post("/api/tryon").send(payload)).status).toBe(401);
     expect(getUserByAuth0UserId).not.toHaveBeenCalled();
     expect(generateImage).not.toHaveBeenCalled();
-
+    expect(await leaseCount()).toBe(0);
   });
   test("missing OpenAI key fails before database/provider work", async () => {
     delete process.env.OPENAI_API_KEY;
@@ -71,10 +74,10 @@ describe("POST /api/tryon authentication, ownership and generation", () => {
     expect(Outfit.findById).toHaveBeenCalledWith("outfit-1");
     expect(generateImage).not.toHaveBeenCalled();
   });
-  test("another user's outfit returns 403", async () => {
+  test("another user's outfit returns 403 without consuming capacity", async () => {
     outfit.userId = { toString: () => "other-user" };
     expect((await post()).status).toBe(403);
-
+    expect(await leaseCount()).toBe(0);
     expect(generateImage).not.toHaveBeenCalled();
   });
   test("an outfit without front garment images returns 400", async () => {
@@ -98,42 +101,74 @@ describe("POST /api/tryon authentication, ownership and generation", () => {
   });
 });
 
-describe("provider failure handling", () => {
-  test("reference-download failure prevents generation", async () => {
+describe("shared generation capacity at the paid-provider boundary", () => {
+  test("cannot start a paid call when all 20 slots are held", async () => {
+    await Promise.all(Array.from({ length: 20 }, () => slots.acquire()));
+    const response = await post();
+    expect(response.status).toBe(429);
+    expect(response.headers["retry-after"]).toBe("30");
+    expect(generateImage).not.toHaveBeenCalled();
+    expect(downloadReference).not.toHaveBeenCalled();
+  });
+  test("database allocation errors prevent provider work", async () => {
+    jest.spyOn(slots, "acquire").mockRejectedValue(Object.assign(new Error("Capacity unavailable"), { status: 503 }));
+    expect((await post()).status).toBe(503);
+    expect(generateImage).not.toHaveBeenCalled();
+  });
+  test("success releases the slot before storage and response", async () => {
+    uploadToCloudinary.mockImplementation(async () => {
+      expect(await leaseCount()).toBe(0);
+      return "https://res.cloudinary.com/demo/result.webp";
+    });
+    expect((await post()).status).toBe(200);
+    expect(await leaseCount()).toBe(0);
+  });
+  test("reference-download failure releases because generation never started", async () => {
     downloadReference.mockRejectedValue(new Error("reference failed"));
     expect((await post()).status).toBe(500);
     expect(generateImage).not.toHaveBeenCalled();
-
+    expect(await leaseCount()).toBe(0);
   });
-  test.each([400, 429])("confirmed provider rejection %i keeps its HTTP status", async (status) => {
+  test.each([400, 429])("confirmed provider rejection %i releases its slot", async (status) => {
     generateImage.mockRejectedValue(Object.assign(new Error("rejected"), { status, generationSettled: true }));
     expect((await post()).status).toBe(status);
-
+    expect(await leaseCount()).toBe(0);
   });
   test.each([new Error("connection reset"), Object.assign(new Error("timeout"), { name: "TimeoutError" }),
-    Object.assign(new Error("upstream failure"), { status: 502 })])("provider failures retain their HTTP status: %s", async (error) => {
+    Object.assign(new Error("upstream failure"), { status: 502 })])("unknown provider outcome retains capacity: %s", async (error) => {
     generateImage.mockRejectedValue(error);
     expect((await post()).status).toBe(error.status || 500);
-
+    expect(await leaseCount()).toBe(1);
   });
-  test("failed storage returns an error after completed generation", async () => {
+  test("failed storage does not retain a completed generation slot", async () => {
     uploadToCloudinary.mockRejectedValue(new Error("storage failure"));
     expect((await post()).status).toBe(500);
-
+    expect(await leaseCount()).toBe(0);
+  });
+  test("failed release leaves the conservative lease instead of retrying generation", async () => {
+    jest.spyOn(slots, "release").mockRejectedValue(new Error("database down"));
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    expect((await post()).status).toBe(200);
+    expect(await leaseCount()).toBe(1);
+    expect(generateImage).toHaveBeenCalledTimes(1);
   });
 });
 
 
-test("legacy oversized outfits are rejected before population or downloads", async () => {
+test("legacy oversized outfits are rejected before population, allocation or downloads", async () => {
  outfit.items = Array.from({ length: 100 }, () => garment);
+ const acquire = jest.spyOn(slots, "acquire");
  expect((await post()).status).toBe(400);
  expect(outfit.populate).not.toHaveBeenCalled();
+ expect(acquire).not.toHaveBeenCalled();
  expect(downloadReference).not.toHaveBeenCalled();
  expect(generateImage).not.toHaveBeenCalled();
 });
-test("legacy references to another user's item never reach downloads or provider", async () => {
+test("legacy references to another user's item never reach capacity or provider", async () => {
  outfit.items = [{ ...garment, userId: "victim-user" }];
+ const acquire = jest.spyOn(slots, "acquire");
  expect((await post()).status).toBe(403);
+ expect(acquire).not.toHaveBeenCalled();
  expect(downloadReference).not.toHaveBeenCalled();
  expect(generateImage).not.toHaveBeenCalled();
 });
