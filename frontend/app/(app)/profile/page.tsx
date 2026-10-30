@@ -1,5 +1,7 @@
 "use client";
 
+import { imageSizeError } from "@/lib/uploads";
+
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -512,6 +514,12 @@ export default function ProfilePage() {
       return;
     }
 
+    const sizeError = imageSizeError(file);
+    if (sizeError) {
+      setErrorMessage(sizeError);
+      event.target.value = "";
+      return;
+    }
     setPhotoName(file.name);
     setPhotoPreview(URL.createObjectURL(file));
     setPhotoSaving(true);

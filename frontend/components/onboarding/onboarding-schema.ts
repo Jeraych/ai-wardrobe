@@ -1,3 +1,4 @@
+import { MAX_IMAGE_BYTES, IMAGE_SIZE_ERROR } from "@/lib/uploads";
 import { z } from "zod";
 import { BODY_SHAPES, GENDERS, STYLE_OPTIONS } from "./onboarding-data";
 
@@ -8,7 +9,7 @@ const fileListSchema = z.custom<FileList | null>((value) => {
   }
 
   return typeof FileList !== "undefined" && value instanceof FileList;
-}, "Please upload a photo.");
+}, "Please upload a photo.").refine((value) => !value?.[0] || value[0].size <= MAX_IMAGE_BYTES, IMAGE_SIZE_ERROR);
 
 export const onboardingStep1Schema = z.object({
   firstName: z

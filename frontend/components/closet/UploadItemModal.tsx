@@ -4,6 +4,7 @@ import { useState, useRef, type DragEvent, type ChangeEvent } from "react";
 import { Modal } from "@/components/ui/Modal";
 import { Button } from "@/components/ui/Button";
 import { UploadGuidelinesModal } from "@/components/ui/UploadGuidelinesModal";
+import { imageSizeError } from "@/lib/uploads";
 import { cn } from "@/components/ui/cn";
 
 export interface NewClothingItem {
@@ -35,6 +36,7 @@ export function UploadItemModal({ open, onClose, onSubmit }: UploadItemModalProp
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [category, setCategory] = useState("");
@@ -45,6 +47,9 @@ export function UploadItemModal({ open, onClose, onSubmit }: UploadItemModalProp
 
   // Keep a local object URL for immediate preview while the parent performs the actual upload.
   function handleFile(file: File) {
+    const error = imageSizeError(file);
+    setImageError(error);
+    if (error) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   }
@@ -83,6 +88,7 @@ export function UploadItemModal({ open, onClose, onSubmit }: UploadItemModalProp
   // Reset state on close so the next upload starts with a clean form.
   function handleClose() {
     setImageFile(null);
+    setImageError(null);
     setImagePreview(null);
     setName("");
     setCategory("");
@@ -93,7 +99,7 @@ export function UploadItemModal({ open, onClose, onSubmit }: UploadItemModalProp
   }
 
   const isShoes = category === "Shoes";
-  const canSubmit = Boolean(category && fit && (isShoes || size));
+  const canSubmit = Boolean(!imageError && category && fit && (isShoes || size));
 
   const inputClass =
     "w-full rounded-xl border-2 border-border bg-neutral-50 px-4 py-3 text-sm font-medium text-foreground outline-none transition focus:border-accent focus:bg-white placeholder:text-muted-foreground";
@@ -140,10 +146,11 @@ export function UploadItemModal({ open, onClose, onSubmit }: UploadItemModalProp
                   ↑
                 </div>
                 <p className="text-sm font-medium text-foreground">Click to upload or drag &amp; drop</p>
-                <p className="mt-1 text-xs text-muted-foreground">JPG, PNG or HEIC</p>
+                <p className="mt-1 text-xs text-muted-foreground">JPG, PNG or HEIC (max 4 MB)</p>
               </>
             )}
           </div>
+          {imageError ? <p role="alert" className="mt-2 text-xs text-red-600">{imageError}</p> : null}
           <div className="mt-3 flex flex-col gap-2">
             <button
               type="button"

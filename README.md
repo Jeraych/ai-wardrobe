@@ -6,7 +6,8 @@ AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in,
 
 - AI Wardrobe was developed collaboratively by `Jeraych`, `TheSKBroook`, `Overrhat`, `Patrick-Sheng`, `hkim807`, and `mzbzy10` as a team course project.
 - The application was designed for the University of Auckland COMPSCI 732 project requirements to explore a complete full-stack workflow for personal wardrobe management and outfit planning.
-- The application integrates Auth0, MongoDB, Cloudinary, and Replicate to manage user profiles, clothing items, and outfits while generating AI-assisted virtual try-on previews.
+- The application integrates Auth0, MongoDB, Cloudinary, and OpenAI to manage user profiles, clothing items, and outfits while generating AI-assisted virtual try-on previews.
+- Subsequent individual maintenance adds direct OpenAI generation, security fixes, and onboarding/preview recovery. A shared 20-request generation limit protects the personal demo; this operational safeguard was added after the original team project.
 
 ## Features
 
@@ -15,7 +16,7 @@ AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in,
 - Profile management for display name, required age/gender body profile fields, optional measurements/body shape, style preferences, and profile/model photo upload.
 - Closet management for adding, editing, searching, and uploading clothing item images.
 - Outfit builder and saved outfit library with favourite outfit support.
-- AI virtual try-on generation using Replicate, with generated images stored through Cloudinary.
+- AI virtual try-on generation using OpenAI, with generated images stored through Cloudinary.
 - Upload guideline modals for profile and clothing images.
 
 ## Screenshots
@@ -49,10 +50,10 @@ AI Wardrobe is a full-stack wardrobe and outfit planning app. Users can sign in,
 This repository is a monorepo with a Next.js frontend and an Express/MongoDB backend.
 
 - `frontend/`: Next.js App Router, React, TypeScript, Tailwind CSS v4, Auth0 client integration, onboarding/profile/closet/outfit UI.
-- `backend/`: Express REST API, Auth0 JWT validation, MongoDB/Mongoose models, Cloudinary uploads, Replicate try-on route, Jest/Supertest tests.
+- `backend/`: Express REST API, Auth0 JWT validation, MongoDB/Mongoose models, Cloudinary uploads, OpenAI try-on route, Jest/Supertest tests.
 - Root package: shared scripts for running the frontend and backend together.
 
-The frontend requests Auth0 access tokens and sends them to the backend. The backend validates those tokens, stores user/closet/outfit data in MongoDB, uploads images to Cloudinary, and calls Replicate for try-on generation.
+The frontend requests Auth0 access tokens and sends them to the backend. The backend validates those tokens, stores user/closet/outfit data in MongoDB, uploads images to Cloudinary, and calls OpenAI for try-on generation.
 
 ## Tech Stack
 
@@ -65,7 +66,7 @@ The frontend requests Auth0 access tokens and sends them to the backend. The bac
 - MongoDB and Mongoose
 - Auth0
 - Cloudinary
-- Replicate
+- OpenAI
 - Vitest
 - Jest and Supertest
 
@@ -75,7 +76,7 @@ The frontend requests Auth0 access tokens and sends them to the backend. The bac
 - MongoDB, either local or Atlas
 - Auth0 tenant and API audience
 - Cloudinary account
-- Replicate API token
+- OpenAI API key
 
 ## Quick Start
 
@@ -136,7 +137,7 @@ AUTH0_AUDIENCE=https://your-api-audience
 CLOUDINARY_CLOUD_NAME=your_cloud_name
 CLOUDINARY_API_KEY=your_api_key
 CLOUDINARY_API_SECRET=your_api_secret
-REPLICATE_API_TOKEN=your_replicate_token
+OPENAI_API_KEY=your_openai_api_key
 ```
 
 Create `frontend/.env`:
@@ -145,11 +146,13 @@ Create `frontend/.env`:
 NEXT_PUBLIC_API_URL=http://localhost:5000
 AUTH0_SECRET=your_auth0_secret
 APP_BASE_URL=http://localhost:3000
-AUTH0_ISSUER_BASE_URL=https://your-tenant.auth0.com
+AUTH0_DOMAIN=your-tenant.auth0.com
 AUTH0_CLIENT_ID=your_client_id
 AUTH0_CLIENT_SECRET=your_client_secret
 AUTH0_AUDIENCE=https://your-api-audience
 AUTH0_SCOPE=openid profile email
+# Optional: your Cloudinary default-model asset directory
+NEXT_PUBLIC_DEFAULT_MODEL_BASE_URL=
 ```
 
 ## Running The App
@@ -269,7 +272,7 @@ npm test
 | `GET`    | `/api/outfits/me`                 | List outfits                                               |
 | `PUT`    | `/api/outfits/me/:id`             | Update an outfit                                           |
 | `DELETE` | `/api/outfits/me/:id`             | Delete an outfit                                           |
-| `POST`   | `/api/tryon`                      | Generate a virtual try-on image with Replicate             |
+| `POST`   | `/api/tryon`                      | Generate a virtual try-on image with OpenAI             |
 
 Authenticated backend routes require:
 

@@ -4,6 +4,7 @@ import { useState, useRef, type DragEvent, type ChangeEvent } from "react";
 import { Button } from "@/components/ui/Button";
 import { type ClothingItem } from "@/components/ui/ItemCard";
 import { UploadGuidelinesModal } from "@/components/ui/UploadGuidelinesModal";
+import { imageSizeError } from "@/lib/uploads";
 import { cn } from "@/components/ui/cn";
 
 interface EditItemPanelProps {
@@ -40,12 +41,16 @@ export function EditItemPanel({ item, onCancel, onSave, onRemove }: EditItemPane
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showGuidelines, setShowGuidelines] = useState(false);
+  const [imageError, setImageError] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [confirmRemove, setConfirmRemove] = useState(false);
 
   // Store the file separately from the preview URL so the parent can upload the original file.
   function handleFile(file: File) {
+    const error = imageSizeError(file);
+    setImageError(error);
+    if (error) return;
     setImageFile(file);
     setImagePreview(URL.createObjectURL(file));
   }
@@ -96,7 +101,7 @@ export function EditItemPanel({ item, onCancel, onSave, onRemove }: EditItemPane
   const inputClass =
     "w-full rounded-xl border-2 border-border bg-neutral-50 px-4 py-2.5 text-sm font-medium text-foreground outline-none transition focus:border-accent focus:bg-white placeholder:text-muted-foreground";
   const isShoes = category === "Shoes";
-  const canSave = Boolean(category && fit && (isShoes || size));
+  const canSave = Boolean(!imageError && category && fit && (isShoes || size));
 
   return (
     <div className="flex h-full w-[340px] shrink-0 flex-col border-l border-border bg-white shadow-2xl">
@@ -143,10 +148,11 @@ export function EditItemPanel({ item, onCancel, onSave, onRemove }: EditItemPane
                   ↑
                 </div>
                 <p className="text-sm font-medium text-foreground">Click to upload or drag &amp; drop</p>
-                <p className="mt-0.5 text-xs text-muted-foreground">JPG, PNG or HEIC</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">JPG, PNG or HEIC (max 4 MB)</p>
               </>
             )}
           </div>
+          {imageError ? <p role="alert" className="mt-2 text-xs text-red-600">{imageError}</p> : null}
           <div className="mt-3 flex flex-col gap-2">
             <button
               type="button"

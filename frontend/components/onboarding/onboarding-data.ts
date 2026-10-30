@@ -22,36 +22,51 @@ export const STYLE_OPTIONS = [
   "🌿 Bohemian",
 ] as const;
 
+// Public model cards are local assets; generation references use an explicitly configured CDN base.
+export function defaultModelImageUrl(filename: string, base = process.env.NEXT_PUBLIC_DEFAULT_MODEL_BASE_URL): string | null {
+  if (!base?.trim()) return null;
+  try {
+    const url = new URL(base.trim());
+    if (url.protocol !== "https:" || url.hostname !== "res.cloudinary.com" || url.username || url.password ||
+        url.port || url.search || url.hash || !/^\/[^/]+\/image\/upload(?:\/.*)?$/.test(url.pathname)) return null;
+    return `${url.href.replace(/\/+$/, "")}/${filename}`;
+  } catch {
+    return null;
+  }
+}
+
 export const MODEL_OPTIONS = [
   {
     id: "model-1",
     label: "Female Model 1",
     imageSrc: "/models/Female-Model-1.jpg",
-    savedImageSrc:
-      "https://res.cloudinary.com/dihvixojc/image/upload/v1778662872/profiles/fj2ebufqcmkjoe7emlxp.jpg",
+    savedImageSrc: defaultModelImageUrl("Female-Model-1.jpg"),
   },
   {
     id: "model-2",
     label: "Female Model 2",
     imageSrc: "/models/Female-Model-2.jpg",
-    savedImageSrc:
-      "https://res.cloudinary.com/dihvixojc/image/upload/v1778663039/profiles/pjo8nnkxfhv7gacbdai6.jpg",
+    savedImageSrc: defaultModelImageUrl("Female-Model-2.jpg"),
   },
   {
     id: "model-3",
     label: "Male Model 1",
     imageSrc: "/models/Male-Model-1.jpg",
-    savedImageSrc:
-      "https://res.cloudinary.com/dihvixojc/image/upload/v1778663188/profiles/rk8a7wymn4sccsu8tt7u.jpg",
+    savedImageSrc: defaultModelImageUrl("Male-Model-1.jpg"),
   },
   {
     id: "model-4",
     label: "Male Model 2",
     imageSrc: "/models/Male-Model-2.jpg",
-    savedImageSrc:
-      "https://res.cloudinary.com/dihvixojc/image/upload/v1778663215/profiles/niv8zga6fr63qpo4ezn0.jpg",
+    savedImageSrc: defaultModelImageUrl("Male-Model-2.jpg"),
   },
 ] as const;
+
+export function selectedDefaultModelImage(id: string | null): string {
+  const image = MODEL_OPTIONS.find(model => model.id === id)?.savedImageSrc;
+  if (!image) throw new Error("Default models are not configured. Please upload your own photo.");
+  return image;
+}
 
 // Step order is the single source of truth for URL params, titles, and progress count.
 export type BodyShape = (typeof BODY_SHAPES)[number];

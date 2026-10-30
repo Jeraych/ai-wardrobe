@@ -13,7 +13,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { type ClothingItem } from "@/components/ui/ItemCard";
 import { cn } from "@/components/ui/cn";
-import { getOutfitPreviewItems } from "@/components/outfits/preview";
+import { getOutfitPreviewItems, getSavedTryOnState } from "@/components/outfits/preview";
 
 const STYLES = [
   "Smart",
@@ -603,6 +603,9 @@ export default function OutfitBuilderPage() {
         const outfit = outfits.find((entry: { _id: string }) => entry._id === initialOutfitId);
         if (!outfit) return;
 
+        const preview = getSavedTryOnState(outfit);
+        setTryOnResultUrl(preview.tryOnResultUrl);
+        setIsTryOnActive(preview.isTryOnActive);
         setName(outfit.name);
         setStyle(outfit.style ?? "");
         setSelectedIds(new Set(outfit.items.map((item: { _id: string }) => item._id)));

@@ -21,7 +21,7 @@ export function SelectModelStep({ onBack }: SelectModelStepProps) {
     register,
     watch,
     setValue,
-    formState: { errors },
+    formState: { errors, isSubmitting },
   } = useFormContext<OnboardingFormValues>();
   const selectedFiles = watch("modelPhoto");
   const modelMode = watch("modelMode");
@@ -66,7 +66,7 @@ export function SelectModelStep({ onBack }: SelectModelStepProps) {
     }
 
     setValue("modelMode", "upload", { shouldDirty: true });
-    setValue("modelPhoto", files, { shouldDirty: true });
+    setValue("modelPhoto", files, { shouldDirty: true, shouldValidate: true });
   };
 
   // Let react-hook-form capture the FileList, then mark upload as the selected mode.
@@ -89,7 +89,7 @@ export function SelectModelStep({ onBack }: SelectModelStepProps) {
           <p className="mt-2 text-sm text-neutral-500">
             Upload a <b> full-body </b> and <b> portrait </b> photo of yourself
             or select our existing models. You can select a model or upload your
-            photo later in your profile.
+            photo later in your profile. Maximum upload size: 4 MB.
           </p>
 
           <div className="mx-auto w-full max-w-md">
@@ -178,7 +178,7 @@ export function SelectModelStep({ onBack }: SelectModelStepProps) {
               type="submit"
               size="lg"
               className="w-full rounded-xl bg-[#58CC02] py-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#46A302]"
-              disabled={!hasPhoto}
+              disabled={isSubmitting || !hasPhoto}
             >
               Upload Photo
             </Button>
@@ -227,7 +227,7 @@ export function SelectModelStep({ onBack }: SelectModelStepProps) {
               type="submit"
               size="lg"
               className="w-full rounded-xl bg-[#58CC02] py-6 text-sm font-bold uppercase tracking-wide text-white hover:bg-[#46A302]"
-              disabled={modelMode === "select" ? !hasModelSelection : !hasPhoto}
+              disabled={isSubmitting || (modelMode === "select" ? !hasModelSelection : !hasPhoto)}
             >
               Select Model
             </Button>

@@ -6,10 +6,10 @@ import {
   FormProvider,
   useForm,
   useController,
-  type FieldPath,
 } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { OnboardingShell } from "./OnboardingShell";
+import { STEP_FIELDS, firstInvalidStep, saveOnboardingError, OnboardingFeedback } from "./onboarding-feedback";
 import {
   getStepKey,
   ONBOARDING_STEP_ORDER,
@@ -35,23 +35,6 @@ interface OnboardingFlowProps {
   };
 }
 
-const STEP_FIELDS = {
-  "body-profile": [
-    "firstName",
-    "lastName",
-    "age",
-    "height",
-    "weight",
-    "bodyShape",
-    "gender",
-  ],
-  "about-yourself": ["stylePreference"],
-  "select-model": ["modelMode", "modelPhoto", "selectedModelId"],
-} as const satisfies Record<
-  keyof typeof STEP_TITLES,
-  readonly FieldPath<OnboardingFormValues>[]
->;
-
 // Coordinates step routing, form validation, and final persistence for onboarding.
 export function OnboardingFlow({
   initialStepIndex = 0,
@@ -60,6 +43,7 @@ export function OnboardingFlow({
   const router = useRouter();
   const pathname = usePathname();
   const [stepIndex, setStepIndex] = useState(initialStepIndex);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const methods = useForm<OnboardingFormValues>({
     resolver: zodResolver(onboardingFormSchema),
@@ -91,23 +75,32 @@ export function OnboardingFlow({
     });
     if (!isValid) return;
 
+    setSubmitError(null);
     setStepIndex((value) =>
       Math.min(value + 1, ONBOARDING_STEP_ORDER.length - 1),
     );
   };
 
   const handleBack = () => {
+    setSubmitError(null);
     setStepIndex((value) => Math.max(value - 1, 0));
   };
 
   const onSubmit = methods.handleSubmit(
     async (values) => {
       // Final submission persists all steps and then enters the authenticated app.
-      await onboardingService.save(values, session);
+      setSubmitError(null);
+      const error = await saveOnboardingError(() => onboardingService.save(values, session));
+      if (error) {
+        setSubmitError(error);
+        return;
+      }
       router.push("/");
     },
     async (errors) => {
-      console.error(errors);
+      const invalidStep = firstInvalidStep(errors);
+      if (invalidStep >= 0) setStepIndex(invalidStep);
+      setSubmitError("Please complete the highlighted fields before continuing.");
     },
   );
 
@@ -122,6 +115,7 @@ export function OnboardingFlow({
             currentStep === "select-model" ? "max-w-4xl" : "max-w-md"
           }
         >
+          <OnboardingFeedback message={submitError} />
           {currentStep === "body-profile" ? (
             <BodyProfileStep onNext={handleNext} />
           ) : null}

@@ -29,3 +29,9 @@ export function getOutfitPreviewItems(items: ClothingItem[]): (ClothingItem | nu
 
   return preview;
 }
+
+// Rehydrate an existing preview when opening a saved outfit; generation remains explicit.
+export function getSavedTryOnState(outfit: { lastTryOnPreviewUrl?: string | null }) {
+  const tryOnResultUrl = outfit.lastTryOnPreviewUrl || null;
+  return { tryOnResultUrl, isTryOnActive: Boolean(tryOnResultUrl) };
+}

@@ -1,4 +1,5 @@
-import { MODEL_OPTIONS } from "@/components/onboarding/onboarding-data";
+import { imageSizeError } from "@/lib/uploads";
+import { selectedDefaultModelImage } from "@/components/onboarding/onboarding-data";
 import type { OnboardingFormValues } from "@/components/onboarding/onboarding-schema";
 import { getAuthHeaders } from "@/lib/api/auth";
 
@@ -33,9 +34,8 @@ export class OnboardingService {
     session?: AuthSession,
   ): Promise<void> {
     const name = this.buildName(values);
-    await this.ensureUserSynced(session, name);
-
     const payload = this.buildProfilePayload(values, name);
+    await this.ensureUserSynced(session, name);
     const response = await fetch(`${this.apiUrl}/api/users/me`, {
       method: "PUT",
       headers: await getAuthHeaders(true),
@@ -89,9 +89,6 @@ export class OnboardingService {
     values: OnboardingFormValues,
     name: string,
   ): UserProfilePayload {
-    const selectedModel =
-      MODEL_OPTIONS.find((item) => item.id === values.selectedModelId) ?? null;
-
     return {
       name,
       bodyProfile: {
@@ -103,9 +100,9 @@ export class OnboardingService {
       },
       stylePreferences: values.stylePreference,
       modelImage:
-        // Default models already have persistent Cloudinary URLs; uploads are handled separately.
+        // A missing asset configuration must not silently persist an unusable model image.
         values.modelMode === "select"
-          ? (selectedModel?.savedImageSrc ?? null)
+          ? selectedDefaultModelImage(values.selectedModelId)
           : null,
       isCompleteOnboarding: true,
     };
@@ -113,6 +110,8 @@ export class OnboardingService {
 
   // Multipart uploads should not include a JSON content type header.
   private async uploadModelImage(image: File): Promise<void> {
+    const error = imageSizeError(image);
+    if (error) throw new Error(error);
     const formData = new FormData();
     formData.append("image", image);
 
